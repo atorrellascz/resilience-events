@@ -1,0 +1,10 @@
+# Conecta Grafana a Prometheus automáticamente al arrancar (config as code)
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy                    # Grafana consulta a Prometheus por la red interna
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: 15s              # coincide con el scrape_interval de Prometheus
