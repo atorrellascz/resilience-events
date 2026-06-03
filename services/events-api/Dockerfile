@@ -7,11 +7,17 @@ COPY . .
 RUN dotnet publish -c Release -o /app /p:UseAppHost=false
 
 # ── runtime stage: minimal image, runtime only ──
+# ── runtime stage: minimal image, runtime only ──
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS final
 WORKDIR /app
+
+# ICU: imprescindible para SqlClient (en-US). 'apk update' refresca el índice primero.
+RUN apk update && apk add --no-cache icu-libs icu-data-full
+
 ENV ASPNETCORE_URLS=http://+:8080 \
     DOTNET_RUNNING_IN_CONTAINER=true \
-    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
+    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+
 COPY --from=build /app .
 USER app
 EXPOSE 8080
