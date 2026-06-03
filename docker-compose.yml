@@ -1,37 +1,38 @@
 # docker-compose.yml — Resilience Events platform (local)
-# Perfiles: 'core' (spine de la demo) y 'full' (todo). Arranque:
+# Profiles: 'core' (the demo spine) and 'full' (everything). Startup:
 #   docker compose --profile core up -d
 #   docker compose --profile full up -d
 name: resilience-events
 
 networks:
-  rep-net:            # red interna propia → aislamiento (blast radius)
+  rep-net:            # dedicated internal network → isolation (blast radius)
     driver: bridge
 
-volumes:              # estado explícito en named volumes → NUNCA en la capa del contenedor
+volumes:              # explicit state in named volumes → NEVER in the container layer
   sqlserver-data:
   mongo-data:
   mysql-data:
   redis-data:
   prometheus-data:
   grafana-data:
+  redpanda-data:
 
 services:
 
-  # ── edge-gateway (Go) ── proxy + resiliencia + journaling (Fase 1) ──
+  # ── edge-gateway (Go) ── proxy + resilience + journaling (Phase 1) ──
   edge-gateway:
     build: ./services/edge-gateway
-    image: rep/edge-gateway:0.1.0       # tag pineado, nunca :latest
+    image: rep/edge-gateway:0.1.0       # pinned tag, never :latest
     container_name: edge-gateway
     profiles: ["core", "full"]
     ports:
-      - "8080:8080"                     # ÚNICA puerta pública de la plataforma
+      - "8080:8080"                     # the ONLY public door of the platform
     environment:
       - EVENTS_API_URL=http://events-api:8080
     networks: [rep-net]
     depends_on:
       events-api:
-        condition: service_healthy      # no arranca hasta que .NET esté sano
+        condition: service_healthy      # does not start until .NET is healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 10s
@@ -40,14 +41,14 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  # ── events-api (.NET) ── dueño de los event records → SQL Server ──
+  # ── events-api (.NET) ── owner of the event records → SQL Server ──
   events-api:
     build: ./services/events-api
     image: rep/events-api:0.1.0
     container_name: events-api
     profiles: ["core", "full"]
     expose:
-      - "8080"                          # interno: solo se llega vía gateway
+      - "8080"                          # internal: only reachable via the gateway
     environment:
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__Sql=Server=sqlserver,1433;Database=events;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=True
@@ -63,19 +64,19 @@ services:
       start_period: 20s
     restart: unless-stopped
 
-  # ── SQL Server ── estado en named volume (lección de los 175 GB) ──
+  # ── SQL Server ── state in a named volume (the 175 GB lesson) ──
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
     container_name: sqlserver
     profiles: ["core", "full"]
     expose:
-      - "1433"                          # NO publicado al host → blast radius
+      - "1433"                          # NOT published to the host → blast radius
     environment:
       - ACCEPT_EULA=Y
       - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD}
       - MSSQL_PID=Developer
     volumes:
-      - sqlserver-data:/var/opt/mssql   # datos fuera de la capa del contenedor
+      - sqlserver-data:/var/opt/mssql   # data outside the container layer
     networks: [rep-net]
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$MSSQL_SA_PASSWORD\" -No -Q \"SELECT 1\" || exit 1"]
@@ -85,7 +86,7 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # ── Redis ── infraestructura compartida: locks, cooldowns, cache ──
+  # ── Redis ── shared infrastructure: locks, cooldowns, cache ──
   redis:
     image: redis:7.4-alpine
     container_name: redis
@@ -100,22 +101,22 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
-    restart: unless-stopped  
+    restart: unless-stopped
 
-# ── Prometheus ── recolección de métricas (RED + SLOs) ──
+# ── Prometheus ── metrics collection (RED + SLOs) ──
   prometheus:
     image: prom/prometheus:v3.1.0
     container_name: prometheus
     profiles: ["core", "full"]
     ports:
-      - "9090:9090"                     # UI publicada para que la veas en la demo
+      - "9090:9090"                     # UI published so you can see it in the demo
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     networks: [rep-net]
     restart: unless-stopped
 
-  # ── Grafana ── dashboards + alertas visuales ──
+  # ── Grafana ── dashboards + visual alerts ──
   grafana:
     image: grafana/grafana:11.4.0
     container_name: grafana
@@ -124,11 +125,134 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-      - GF_AUTH_ANONYMOUS_ENABLED=true  # solo local, para abrir sin login en la demo
+      - GF_AUTH_ANONYMOUS_ENABLED=true  # local only, to open without login in the demo
     volumes:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana-data:/var/lib/grafana
     networks: [rep-net]
     depends_on: [prometheus]
-    restart: unless-stopped    
+    restart: unless-stopped
+
+# ── catalog-api (Go) ── monitored-systems metadata → MongoDB ──
+  catalog-api:
+    build: ./services/catalog-api
+    image: rep/catalog-api:0.1.0
+    container_name: catalog-api
+    profiles: ["full"]                  # only in the full profile
+    expose:
+      - "8080"
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017
+    networks: [rep-net]
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── anomaly-ai (Python) ── metrics + AI brain → MySQL ──
+  anomaly-ai:
+    build: ./services/anomaly-ai
+    image: rep/anomaly-ai:0.1.0
+    container_name: anomaly-ai
+    profiles: ["full"]
+    expose:
+      - "8080"
+    environment:
+      - MYSQL_URI=mysql://anomaly:${MYSQL_PASSWORD}@mysql:3306/anomaly
+    networks: [rep-net]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/health').status==200 else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # ── MongoDB ── flexible documents for catalog metadata ──
+  mongodb:
+    image: mongo:7.0
+    container_name: mongodb
+    profiles: ["full"]
+    expose:
+      - "27017"
+    volumes:
+      - mongo-data:/data/db
+    networks: [rep-net]
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── MySQL ── relational with a clear schema for metrics + decision records ──
+  mysql:
+    image: mysql:8.4
+    container_name: mysql
+    profiles: ["full"]
+    expose:
+      - "3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=anomaly
+      - MYSQL_USER=anomaly
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks: [rep-net]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+# ── Redpanda ── Kafka-compatible event log (journaling + replay) ──
+  redpanda:
+    image: redpandadata/redpanda:v24.3.1
+    container_name: redpanda
+    profiles: ["full"]
+    command:
+      - redpanda start
+      - --overprovisioned                 # dev mode: does not assume dedicated resources
+      - --smp 1                            # 1 core → lightweight for local
+      - --memory 512M                      # bounded RAM limit
+      - --reserve-memory 0M
+      - --node-id 0
+      - --check=false
+      - --kafka-addr PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:9092
+    expose:
+      - "9092"                             # Kafka port, internal to rep-net
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    networks: [rep-net]
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ── Loki ── log aggregation (logs in Grafana come from here) ──
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: loki
+    profiles: ["full"]
+    expose:
+      - "3100"
+    networks: [rep-net]
+    restart: unless-stopped
 

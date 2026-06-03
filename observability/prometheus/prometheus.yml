@@ -1,17 +1,17 @@
-# Prometheus scrape config — qué métricas recolectar y cada cuánto
+# Prometheus scrape config — which metrics to collect and how often
 global:
-  scrape_interval: 15s        # frecuencia de scrape por defecto
-  evaluation_interval: 15s    # cada cuánto evalúa reglas de alerta (Fase 3)
+  scrape_interval: 15s        # default scrape frequency
+  evaluation_interval: 15s    # how often alert rules are evaluated (Phase 3)
   external_labels:
-    platform: resilience-events   # etiqueta que marca todas las métricas de esta plataforma
+    platform: resilience-events   # label that marks every metric from this platform
 
 scrape_configs:
-  # El propio Prometheus (saber si el recolector está sano)
+  # Prometheus itself (to know whether the collector is healthy)
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]
 
-  # Nuestros servicios — Prometheus los encuentra por nombre en rep-net
+  # Our services — Prometheus finds them by name on rep-net
   - job_name: edge-gateway
     static_configs:
       - targets: ["edge-gateway:8080"]
@@ -22,8 +22,8 @@ scrape_configs:
       - targets: ["events-api:8080"]
         labels: { service: events-api, tier: domain }
 
-  # Estos dos solo responden en perfil 'full' — Prometheus los marcará
-  # 'down' en perfil core, y eso está BIEN (ausencia visible, no error oculto)
+  # These two only respond in the 'full' profile — Prometheus will mark them
+  # 'down' in the core profile, and that is FINE (visible absence, not a hidden error)
   - job_name: catalog-api
     static_configs:
       - targets: ["catalog-api:8080"]

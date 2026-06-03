@@ -4,10 +4,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 var app = builder.Build();
 
-// Mide rate, errores y duración (RED) de cada request HTTP automáticamente.
+// Automatically measures rate, errors and duration (RED) of every HTTP request.
 app.UseHttpMetrics();
 
-// Hello / identidad del servicio
+// Hello / service identity
 app.MapGet("/", () => Results.Json(new
 {
     service  = "events-api",
@@ -16,14 +16,14 @@ app.MapGet("/", () => Results.Json(new
     message  = "Hello from events-api - Phase 0 stub"
 }));
 
-// Liveness: ¿el proceso está vivo? (k8s reinicia el pod si esto falla)
+// Liveness: is the process alive? (k8s restarts the pod if this fails)
 app.MapGet("/health", () => Results.Json(new { status = "healthy" }));
 
-// Readiness: ¿listo para recibir tráfico? (k8s deja de enviarle tráfico si falla)
-// Fase 1: aquí chequearemos la conexión real a SQL Server.
+// Readiness: ready to receive traffic? (k8s stops sending traffic if this fails)
+// Phase 1: here we will check the real connection to SQL Server.
 app.MapGet("/ready", () => Results.Json(new { status = "ready" }));
 
-// Endpoint que Prometheus scrapea cada 15s
+// Endpoint that Prometheus scrapes every 15s
 app.MapMetrics();
 
 app.Run();

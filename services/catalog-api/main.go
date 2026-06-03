@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 )
 
-// Simple request counter (Phase 1: replaced by the real Prometheus client).
+// Phase 0: stdlib stub. Phase 1 adds: the official MongoDB client,
+// handler -> service -> repository layers, and the real Prometheus client.
 var requests int64
 
-// writeJSON centralizes the JSON response (DRY: a single place that sets headers).
 func writeJSON(w http.ResponseWriter, code int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
@@ -20,10 +20,10 @@ func writeJSON(w http.ResponseWriter, code int, payload any) {
 }
 
 func main() {
-	// The backend URL comes from env (12-factor): injectable, not hardcoded.
-	eventsURL := os.Getenv("EVENTS_API_URL")
-	if eventsURL == "" {
-		eventsURL = "http://events-api:8080"
+	// The Mongo URI comes from env (12-factor), not hardcoded.
+	mongoURI := os.Getenv("MONGO_URI")
+	if mongoURI == "" {
+		mongoURI = "mongodb://mongodb:27017"
 	}
 
 	mux := http.NewServeMux()
@@ -31,11 +31,11 @@ func main() {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt64(&requests, 1)
 		writeJSON(w, http.StatusOK, map[string]string{
-			"service":   "edge-gateway",
-			"language":  "Go",
-			"role":      "reverse proxy + resilience + request journaling",
-			"backend":   eventsURL,
-			"message":   "Hello from edge-gateway - Phase 0 stub",
+			"service":  "catalog-api",
+			"language": "Go",
+			"domain":   "monitored-systems metadata",
+			"backend":  mongoURI,
+			"message":  "Hello from catalog-api - Phase 0 stub",
 		})
 	})
 
@@ -47,14 +47,13 @@ func main() {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 	})
 
-	// Minimal /metrics in Prometheus exposition format (valid and scrapeable).
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-		fmt.Fprint(w, "# HELP gateway_up Service up indicator\n# TYPE gateway_up gauge\ngateway_up 1\n")
-		fmt.Fprintf(w, "# HELP gateway_requests_total Total HTTP requests handled\n# TYPE gateway_requests_total counter\ngateway_requests_total %d\n", atomic.LoadInt64(&requests))
+		fmt.Fprint(w, "# HELP catalog_up Service up indicator\n# TYPE catalog_up gauge\ncatalog_up 1\n")
+		fmt.Fprintf(w, "# HELP catalog_requests_total Total HTTP requests handled\n# TYPE catalog_requests_total counter\ncatalog_requests_total %d\n", atomic.LoadInt64(&requests))
 	})
 
 	addr := ":8080"
-	log.Printf("edge-gateway listening on %s, backend=%s", addr, eventsURL)
+	log.Printf("catalog-api listening on %s, mongo=%s", addr, mongoURI)
 	log.Fatal(http.ListenAndServe(addr, mux))
 }
