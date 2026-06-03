@@ -1,0 +1,33 @@
+# ── Secretos y entorno local — NUNCA al repo ──────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+
+# ── .NET (events-api) ─────────────────────────────────
+bin/
+obj/
+
+# ── Go (catalog-api) ──────────────────────────────────
+*.exe
+*.test
+
+# ── Python (anomaly-ai) ───────────────────────────────
+__pycache__/
+*.pyc
+.venv/
+
+# ── Terraform (Fase 5) ────────────────────────────────
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
+# ── IDE / Windows ─────────────────────────────────────
+.vs/
+.vscode/
+.idea/
+Thumbs.db
