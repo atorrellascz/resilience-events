@@ -15,14 +15,14 @@ public class EventServiceTests
 
     public EventServiceTests()
     {
-        // Inyectamos el MOCK en vez del repo real de EF Core. Sin SQL Server.
+        // We inject the MOCK instead of the real EF Core repo. No SQL Server.
         _sut = new EventService(_repo.Object);
     }
 
     [Fact]
     public async Task CreateAsync_ValidRequest_PersistsAndReturnsResponse()
     {
-        // Arrange: el mock devuelve lo que se le pase a AddAsync
+        // Arrange: the mock returns whatever is passed to AddAsync
         _repo.Setup(r => r.AddAsync(It.IsAny<Event>(), It.IsAny<CancellationToken>()))
              .ReturnsAsync((Event e, CancellationToken _) => e);
 
@@ -35,14 +35,14 @@ public class EventServiceTests
         result.Should().NotBeNull();
         result.Source.Should().Be("payment-api");
         result.Severity.Should().Be("critical");
-        result.Id.Should().NotBe(Guid.Empty);            // el dominio generó un Id
+        result.Id.Should().NotBe(Guid.Empty);            // the domain generated an Id
         _repo.Verify(r => r.AddAsync(It.IsAny<Event>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
     public async Task CreateAsync_UnknownSeverity_NormalizesToInfo()
     {
-        // El dominio normaliza severities desconocidas a "info" (regla de negocio)
+        // The domain normalizes unknown severities to "info" (business rule)
         _repo.Setup(r => r.AddAsync(It.IsAny<Event>(), It.IsAny<CancellationToken>()))
              .ReturnsAsync((Event e, CancellationToken _) => e);
 
@@ -65,10 +65,10 @@ public class EventServiceTests
     }
 
     [Theory]
-    [InlineData(0, 50)]      // límite inválido (0) → se corrige a 50
-    [InlineData(-5, 50)]     // negativo → 50
-    [InlineData(999, 50)]    // demasiado alto → 50
-    [InlineData(25, 25)]     // válido → se respeta
+    [InlineData(0, 50)]      // invalid limit (0) → corrected to 50
+    [InlineData(-5, 50)]     // negative → 50
+    [InlineData(999, 50)]    // too high → 50
+    [InlineData(25, 25)]     // valid → respected
     public async Task ListAsync_ClampsLimitToSafeRange(int requested, int expectedUsed)
     {
         _repo.Setup(r => r.ListAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
@@ -76,7 +76,7 @@ public class EventServiceTests
 
         await _sut.ListAsync(requested);
 
-        // Verificamos que el service llamó al repo con el límite ACOTADO, no el pedido
+        // We verify that the service called the repo with the CLAMPED limit, not the requested one
         _repo.Verify(r => r.ListAsync(expectedUsed, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

@@ -1,14 +1,14 @@
 namespace EventsApi.Application.Dtos;
 
-/// <summary>Lo que el cliente ENVÍA para crear un evento (entrada).</summary>
+/// <summary>What the client SENDS to create an event (input).</summary>
 public record CreateEventRequest(
     string Source,
     string Severity,
     string Message,
-    DateTimeOffset? OccurredAt   // opcional: si no lo manda, usamos "ahora"
+    DateTimeOffset? OccurredAt   // optional: if not sent, we use "now"
 );
 
-/// <summary>Lo que el servicio DEVUELVE (salida). NO exponemos la entidad directa.</summary>
+/// <summary>What the service RETURNS (output). We do NOT expose the entity directly.</summary>
 public record EventResponse(
     Guid Id,
     string Source,

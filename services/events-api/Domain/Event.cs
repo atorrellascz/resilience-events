@@ -1,8 +1,8 @@
 namespace EventsApi.Domain.Entities;
 
 /// <summary>
-/// Un registro de evento operacional — la entidad central del dominio.
-/// C# puro: NO conoce EF Core, ni HTTP, ni ninguna infraestructura.
+/// An operational event record — the central entity of the domain.
+/// Pure C#: it knows NOTHING about EF Core, HTTP, or any infrastructure.
 /// </summary>
 public class Event
 {
@@ -13,12 +13,12 @@ public class Event
     public DateTimeOffset OccurredAt { get; private set; }
     public DateTimeOffset RecordedAt { get; private set; }
 
-    // Constructor privado sin parámetros: requerido por EF Core para materializar
-    // desde la DB. Privado para que NADIE más cree un Event inválido por aquí.
+    // Private parameterless constructor: required by EF Core to materialize
+    // from the DB. Private so that NO ONE else creates an invalid Event this way.
     private Event() { }
 
-    // Fábrica: la ÚNICA forma de crear un Event. Garantiza un objeto válido
-    // desde su nacimiento (invariantes del dominio protegidas).
+    // Factory: the ONLY way to create an Event. Guarantees a valid object
+    // from birth (domain invariants protected).
     public static Event Create(string source, string severity, string message, DateTimeOffset occurredAt)
     {
         if (string.IsNullOrWhiteSpace(source))

@@ -10,20 +10,20 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ── Logging estructurado (JSON) con Serilog → lo consumirá Loki en Fase 3 ──
+// ── Structured logging (JSON) with Serilog → consumed by Loki in Phase 3 ──
 builder.Host.UseSerilog((ctx, cfg) => cfg
     .ReadFrom.Configuration(ctx.Configuration)
     .Enrich.FromLogContext()
     .WriteTo.Console(new Serilog.Formatting.Json.JsonFormatter()));
 
-// ── Registro de dependencias (Composition Root): aquí se atan las capas ──
+// ── Dependency registration (Composition Root): the layers are wired here ──
 
-// DbContext → SQL Server, cadena de conexión desde config/entorno (12-factor)
+// DbContext → SQL Server, connection string from config/environment (12-factor)
 builder.Services.AddDbContext<EventsDbContext>(opt =>
     opt.UseSqlServer(builder.Configuration.GetConnectionString("Sql")));
 
-// La D de SOLID hecha config: la interfaz se resuelve a la implementación concreta.
-// Cambiar de EF Core a otra cosa = cambiar SOLO estas dos líneas.
+// The D in SOLID as config: the interface resolves to the concrete implementation.
+// Switching from EF Core to something else = changing ONLY these two lines.
 builder.Services.AddScoped<IEventRepository, EventRepository>();
 builder.Services.AddScoped<IEventService, EventService>();
 
@@ -34,18 +34,18 @@ builder.Services.AddFluentValidationAutoValidation();
 
 var app = builder.Build();
 
-// Mide RED (rate/errors/duration) de cada request HTTP.
+// Measures RED (rate/errors/duration) of every HTTP request.
 app.UseHttpMetrics();
-app.UseSerilogRequestLogging();   // un log estructurado por request (método, ruta, status, duración)
+app.UseSerilogRequestLogging();   // one structured log per request (method, path, status, duration)
 
 app.MapControllers();
 
 // ── Health endpoints ──
-// Liveness: ¿el proceso vive? Barato, NO toca la DB (si fallara aquí, k8s reinicia).
+// Liveness: is the process alive? Cheap, does NOT touch the DB (if this fails, k8s restarts).
 app.MapGet("/health", () => Results.Json(new { status = "healthy" }));
 
-// Readiness REAL: ¿puedo atender tráfico? Comprueba que SQL Server responde.
-// Si la DB cae, /ready falla → k8s saca el pod del balanceo (no lo mata).
+// REAL readiness: can I serve traffic? Checks that SQL Server responds.
+// If the DB goes down, /ready fails → k8s removes the pod from the load balancer (does not kill it).
 app.MapGet("/ready", async (IEventRepository repo, CancellationToken ct) =>
 {
     var dbOk = await repo.CanConnectAsync(ct);
@@ -55,7 +55,7 @@ app.MapGet("/ready", async (IEventRepository repo, CancellationToken ct) =>
                        statusCode: StatusCodes.Status503ServiceUnavailable);
 });
 
-app.MapMetrics();   // /metrics para Prometheus
+app.MapMetrics();   // /metrics for Prometheus
 
 await ApplyMigrationsWithRetryAsync(app);
 
@@ -79,7 +79,7 @@ static async Task ApplyMigrationsWithRetryAsync(WebApplication app)
         }
         catch (Exception ex)
         {
-            // Backoff lineal: 2s, 4s, 6s... da tiempo a que SQL Server termine de arrancar.
+            // Linear backoff: 2s, 4s, 6s... gives SQL Server time to finish starting up.
             var delay = TimeSpan.FromSeconds(2 * attempt);
             logger.LogWarning(ex,
                 "Migration attempt {Attempt}/{Max} failed; retrying in {Delay}s",
@@ -88,7 +88,7 @@ static async Task ApplyMigrationsWithRetryAsync(WebApplication app)
         }
     }
 
-    // Si tras todos los intentos no se pudo, fallamos explícitamente (no arrancar a ciegas).
+    // If it could not be done after all attempts, we fail explicitly (don't start up blind).
     logger.LogError("Could not apply migrations after {Max} attempts; shutting down", maxAttempts);
     throw new InvalidOperationException("Database migration failed after retries.");
 }

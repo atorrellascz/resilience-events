@@ -4,8 +4,8 @@ using Microsoft.EntityFrameworkCore;
 namespace EventsApi.Infrastructure.Persistence;
 
 /// <summary>
-/// Puente entre el dominio y SQL Server. Vive en Infrastructure porque
-/// conoce EF Core — un detalle que el dominio jamás debe ver.
+/// Bridge between the domain and SQL Server. Lives in Infrastructure because
+/// it knows EF Core — a detail the domain must never see.
 /// </summary>
 public class EventsDbContext : DbContext
 {
@@ -19,14 +19,14 @@ public class EventsDbContext : DbContext
 
         e.HasKey(x => x.Id);
 
-        // Mapeo explícito: longitudes máximas (evita columnas NVARCHAR(MAX) por defecto)
+        // Explicit mapping: maximum lengths (avoids default NVARCHAR(MAX) columns)
         e.Property(x => x.Source).HasMaxLength(200).IsRequired();
         e.Property(x => x.Severity).HasMaxLength(20).IsRequired();
         e.Property(x => x.Message).HasMaxLength(2000).IsRequired();
         e.Property(x => x.OccurredAt).IsRequired();
         e.Property(x => x.RecordedAt).IsRequired();
 
-        // Índices para queries comunes: por fuente y por fecha (rendimiento)
+        // Indexes for common queries: by source and by date (performance)
         e.HasIndex(x => x.Source);
         e.HasIndex(x => x.OccurredAt);
 

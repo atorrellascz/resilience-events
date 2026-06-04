@@ -3,9 +3,9 @@ using EventsApi.Domain.Entities;
 namespace EventsApi.Application.Interfaces;
 
 /// <summary>
-/// Puerto de persistencia. La capa Application define ESTA interfaz;
-/// Infrastructure la implementa (con EF Core/SQL Server) en otro anillo.
-/// Application NO sabe qué hay detrás: podría ser SQL Server, Postgres o un mock.
+/// Persistence port. The Application layer defines THIS interface;
+/// Infrastructure implements it (with EF Core/SQL Server) in another ring.
+/// Application does NOT know what's behind it: could be SQL Server, Postgres, or a mock.
 /// </summary>
 public interface IEventRepository
 {
@@ -13,6 +13,6 @@ public interface IEventRepository
     Task<Event?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<IReadOnlyList<Event>> ListAsync(int limit, CancellationToken ct = default);
 
-    // Para el /ready: ¿la base responde? (lo usaremos en el health check real)
+    // For /ready: does the database respond? (used in the real health check)
     Task<bool> CanConnectAsync(CancellationToken ct = default);
 }

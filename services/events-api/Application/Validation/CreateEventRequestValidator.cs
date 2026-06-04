@@ -4,8 +4,8 @@ using FluentValidation;
 namespace EventsApi.Application.Validation;
 
 /// <summary>
-/// Valida la ENTRADA HTTP (el DTO) antes de que llegue al dominio.
-/// Esto es defensa en la frontera: rechazamos basura temprano, con mensajes claros.
+/// Validates the HTTP INPUT (the DTO) before it reaches the domain.
+/// This is defense at the boundary: we reject garbage early, with clear messages.
 /// </summary>
 public class CreateEventRequestValidator : AbstractValidator<CreateEventRequest>
 {
@@ -25,7 +25,7 @@ public class CreateEventRequestValidator : AbstractValidator<CreateEventRequest>
             .Must(s => AllowedSeverities.Contains((s ?? "").ToLowerInvariant()))
             .WithMessage("Severity must be one of: info, warning, critical.");
 
-        // Un evento no puede haber "ocurrido" en el futuro (defensa contra datos absurdos)
+        // An event cannot have "occurred" in the future (defense against absurd data)
         RuleFor(x => x.OccurredAt)
             .Must(d => d is null || d <= DateTimeOffset.UtcNow.AddMinutes(5))
             .WithMessage("OccurredAt cannot be in the future.");

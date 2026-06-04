@@ -13,14 +13,14 @@ public interface IEventService
 
 public class EventService : IEventService
 {
-    private readonly IEventRepository _repo;   // depende de la ABSTRACCIÓN, no de EF Core
+    private readonly IEventRepository _repo;   // depends on the ABSTRACTION, not on EF Core
 
-    // Inyección por constructor: el repo concreto se inyecta desde afuera (DI).
+    // Constructor injection: the concrete repo is injected from outside (DI).
     public EventService(IEventRepository repo) => _repo = repo;
 
     public async Task<EventResponse> CreateAsync(CreateEventRequest req, CancellationToken ct = default)
     {
-        // La fábrica del dominio valida y crea un Event válido por construcción.
+        // The domain factory validates and creates an Event that is valid by construction.
         var evt = Event.Create(
             req.Source,
             req.Severity,
@@ -39,12 +39,12 @@ public class EventService : IEventService
 
     public async Task<IReadOnlyList<EventResponse>> ListAsync(int limit, CancellationToken ct = default)
     {
-        if (limit is < 1 or > 200) limit = 50;   // cota defensiva: nunca un query ilimitado
+        if (limit is < 1 or > 200) limit = 50;   // defensive cap: never an unbounded query
         var events = await _repo.ListAsync(limit, ct);
         return events.Select(ToResponse).ToList();
     }
 
-    // Mapeo entidad -> DTO, en un solo lugar (DRY).
+    // Entity -> DTO mapping, in a single place (DRY).
     private static EventResponse ToResponse(Event e) =>
         new(e.Id, e.Source, e.Severity, e.Message, e.OccurredAt, e.RecordedAt);
 }

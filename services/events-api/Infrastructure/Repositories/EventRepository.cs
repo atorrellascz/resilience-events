@@ -6,9 +6,9 @@ using Microsoft.EntityFrameworkCore;
 namespace EventsApi.Infrastructure.Repositories;
 
 /// <summary>
-/// Implementa IEventRepository usando EF Core + SQL Server.
-/// Application definió el contrato; aquí lo cumplimos. Si cambiáramos a Postgres,
-/// solo esta clase y el DbContext cambian — la lógica de negocio NO se toca.
+/// Implements IEventRepository using EF Core + SQL Server.
+/// Application defined the contract; here we fulfill it. If we switched to Postgres,
+/// only this class and the DbContext change — the business logic is NOT touched.
 /// </summary>
 public class EventRepository : IEventRepository
 {
@@ -25,7 +25,7 @@ public class EventRepository : IEventRepository
 
     public async Task<Event?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         await _db.Events
-            .AsNoTracking()                       // solo lectura: no rastrea cambios (más rápido)
+            .AsNoTracking()                       // read-only: does not track changes (faster)
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
     public async Task<IReadOnlyList<Event>> ListAsync(int limit, CancellationToken ct = default) =>
@@ -35,7 +35,7 @@ public class EventRepository : IEventRepository
             .Take(limit)
             .ToListAsync(ct);
 
-    // Chequeo de salud real para el /ready: ¿SQL Server responde?
+    // Real health check for /ready: does SQL Server respond?
     public async Task<bool> CanConnectAsync(CancellationToken ct = default) =>
         await _db.Database.CanConnectAsync(ct);
 }
