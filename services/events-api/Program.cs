@@ -2,6 +2,8 @@ using EventsApi.Application.Interfaces;
 using EventsApi.Application.Services;
 using EventsApi.Infrastructure.Persistence;
 using EventsApi.Infrastructure.Repositories;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 using Microsoft.EntityFrameworkCore;
 using Prometheus;
 using Serilog;
@@ -26,6 +28,9 @@ builder.Services.AddScoped<IEventRepository, EventRepository>();
 builder.Services.AddScoped<IEventService, EventService>();
 
 builder.Services.AddControllers();
+
+builder.Services.AddValidatorsFromAssemblyContaining<EventsApi.Application.Validation.CreateEventRequestValidator>();
+builder.Services.AddFluentValidationAutoValidation();
 
 var app = builder.Build();
 

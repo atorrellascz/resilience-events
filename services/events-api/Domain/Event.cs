@@ -7,9 +7,9 @@ namespace EventsApi.Domain.Entities;
 public class Event
 {
     public Guid Id { get; private set; }
-    public string Source { get; private set; }       // qué sistema generó el evento
-    public string Severity { get; private set; }     // info | warning | critical
-    public string Message { get; private set; }
+    public string Source { get; private set; } = string.Empty;
+    public string Severity { get; private set; } = string.Empty;
+    public string Message { get; private set; } = string.Empty;
     public DateTimeOffset OccurredAt { get; private set; }
     public DateTimeOffset RecordedAt { get; private set; }
 
