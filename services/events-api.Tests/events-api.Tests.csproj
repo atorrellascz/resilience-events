@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- El proyecto de test referencia al de producción para testear sus clases -->
+    <!-- The test project references the production one to test its classes -->
     <ProjectReference Include="../events-api/events-api.csproj" />
   </ItemGroup>
 

@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: resilience-platform
+  namespace: argocd            # Applications live in the Argo namespace
+spec:
+  project: default
+
+  # ── Source: your GitHub repo, the umbrella chart ──
+  source:
+    repoURL: https://github.com/atorrellascz/resilience-events.git
+    targetRevision: main
+    path: deploy/helm/platform   # the umbrella chart
+
+  # ── Destination: where to deploy (your local cluster) ──
+  destination:
+    server: https://kubernetes.default.svc   # the same cluster where Argo runs
+    namespace: default
+
+  # ── Sync policy ──
+  syncPolicy:
+    automated:
+      prune: true        # if you delete something from git, Argo deletes it from the cluster
+      selfHeal: true     # if someone touches the cluster by hand, Argo reverts it
+    syncOptions:
+      - CreateNamespace=true

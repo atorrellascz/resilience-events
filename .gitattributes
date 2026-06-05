@@ -1,7 +1,7 @@
-# Normaliza finales de línea: el repo SIEMPRE guarda LF, sin importar el SO del dev
+# Normalize line endings: the repo ALWAYS stores LF, regardless of the dev's OS
 * text=auto eol=lf
 
-# Archivos que DEBEN ser LF (scripts y configs que corren en Linux/contenedores)
+# Files that MUST be LF (scripts and configs that run on Linux/containers)
 *.sh      text eol=lf
 *.yml     text eol=lf
 *.yaml    text eol=lf
@@ -10,7 +10,7 @@ Dockerfile text eol=lf
 *.cs      text eol=lf
 *.py      text eol=lf
 
-# Archivos binarios: git no debe tocarlos
+# Binary files: git must not touch them
 *.png     binary
 *.jpg     binary
 *.ico     binary
