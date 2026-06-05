@@ -1,0 +1,32 @@
+apiVersion: v2
+name: platform
+description: Umbrella chart - deploys the whole Resilience Events platform
+type: application
+version: 0.1.0
+
+# Dependencies: the charts this umbrella groups together.
+# 'file://' points to local charts (paths relative to this Chart.yaml).
+dependencies:
+  # ── infra-dev (local-only DBs) ──
+  - name: sqlserver-dev
+    version: 0.1.0
+    repository: "file://../infra-dev/sqlserver-dev"
+  - name: mongodb-dev
+    version: 0.1.0
+    repository: "file://../infra-dev/mongodb-dev"
+  - name: mysql-dev
+    version: 0.1.0
+    repository: "file://../infra-dev/mysql-dev"
+  # ── apps ──
+  - name: events-api
+    version: 0.1.0
+    repository: "file://../apps/events-api"
+  - name: catalog-api
+    version: 0.1.0
+    repository: "file://../apps/catalog-api"
+  - name: anomaly-ai
+    version: 0.1.0
+    repository: "file://../apps/anomaly-ai"
+  - name: edge-gateway
+    version: 0.1.0
+    repository: "file://../apps/edge-gateway"

@@ -1,0 +1,22 @@
+replicaCount: 1
+
+image:
+  repository: rep/edge-gateway
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  port: 8080
+  type: NodePort          # ← exposed outside the cluster (it's the public door)
+  nodePort: 30080         # fixed port on the host to reach the gateway
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
+
+config:
+  eventsApiUrl: "http://events-api:8080"   # backend, via k8s internal DNS

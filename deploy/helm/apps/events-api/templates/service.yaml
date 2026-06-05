@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: events-api
+  labels:
+    app: events-api
+spec:
+  type: ClusterIP            # only reachable INSIDE the cluster (not exposed outside)
+  selector:
+    app: events-api          # routes to the pods with this label
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}
+      protocol: TCP

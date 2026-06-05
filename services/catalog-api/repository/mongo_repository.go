@@ -58,6 +58,9 @@ func (r *MongoRepository) List(ctx context.Context, limit int64) ([]*domain.Moni
 	if err := cursor.All(ctx, &results); err != nil {
 		return nil, err
 	}
+	if results == nil {
+		results = []*domain.MonitoredSystem{}
+	}
 	return results, nil
 }
 

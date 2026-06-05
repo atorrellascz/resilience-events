@@ -1,0 +1,24 @@
+# Default values for the events-api chart. Injected into the templates.
+replicaCount: 1
+
+image:
+  repository: rep/events-api
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent   # doesn't re-pull the image if already local (key for kind)
+
+service:
+  port: 8080
+
+# Resources: requests = the guaranteed amount, limits = the ceiling
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Connection string to SQL Server (locally, the 'sqlserver' pod).
+# The secret (password) does NOT go here — it's injected via a Secret (covered later).
+config:
+  sqlServer: "Server=sqlserver,1433;Database=events;User Id=sa;TrustServerCertificate=True"

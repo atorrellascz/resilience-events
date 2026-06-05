@@ -1,0 +1,6 @@
+apiVersion: v2
+name: events-api
+description: Operational event records service (.NET 10 + SQL Server)
+type: application
+version: 0.1.0          # CHART version (the packaging)
+appVersion: "0.1.0"     # version of the APP it deploys (your image)

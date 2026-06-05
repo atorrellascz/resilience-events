@@ -1,0 +1,6 @@
+apiVersion: v2
+name: edge-gateway
+description: Public edge - reverse proxy + resilience + request journaling (Go)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

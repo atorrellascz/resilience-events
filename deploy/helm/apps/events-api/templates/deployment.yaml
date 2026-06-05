@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: events-api
+  labels:
+    app: events-api
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: events-api
+  template:
+    metadata:
+      labels:
+        app: events-api          # the pods carry this label → the Service finds them
+    spec:
+      # ── Pod-level security: enforced non-root ──
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654          # the 'app' user of the .NET image
+        fsGroup: 1654
+      containers:
+        - name: events-api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          # ── Injected config + secret ──
+          env:
+            - name: ConnectionStrings__Sql
+              valueFrom:
+                secretKeyRef:
+                  name: events-api-secrets
+                  key: sql-connection
+          # ── Probes: REAL liveness and readiness ──
+          startupProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.service.port }}
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.service.port }}
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: {{ .Values.service.port }}
+            periodSeconds: 10
+            failureThreshold: 3
+          # ── Resources: guaranteed vs ceiling ──
+          resources:
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
+          # ── Container-level security ──
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false   # .NET writes temp files; we'll tune this if needed
+            capabilities:
+              drop: ["ALL"]

@@ -1,0 +1,21 @@
+replicaCount: 1
+
+image:
+  repository: rep/catalog-api
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  port: 8080
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi          # Go is super lightweight, much less than .NET
+  limits:
+    cpu: 250m
+    memory: 128Mi
+
+config:
+  mongoUri: "mongodb://mongodb:27017"   # points to the Mongo service in k8s
+  mongoDb: "catalog"

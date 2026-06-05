@@ -1,4 +1,4 @@
-# ── Secretos y entorno local — NUNCA al repo ──────────
+# ── Secrets and local environment — NEVER to the repo ──────────
 .env
 .env.*
 !.env.example
@@ -19,7 +19,7 @@ __pycache__/
 *.pyc
 .venv/
 
-# ── Terraform (Fase 5) ────────────────────────────────
+# ── Terraform (Phase 5) ────────────────────────────────
 .terraform/
 *.tfstate
 *.tfstate.*
@@ -31,3 +31,7 @@ __pycache__/
 .vscode/
 .idea/
 Thumbs.db
+
+
+deploy/helm/platform/charts/
+deploy/helm/platform/Chart.lock
