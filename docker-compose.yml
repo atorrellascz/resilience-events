@@ -164,7 +164,7 @@ services:
     expose:
       - "8080"
     environment:
-      - MYSQL_URI=mysql://anomaly:${MYSQL_PASSWORD}@mysql:3306/anomaly
+      - DATABASE_URL=mysql+aiomysql://anomaly:${MYSQL_PASSWORD}@mysql:3306/anomaly
     networks: [rep-net]
     depends_on:
       mysql:
