@@ -22,7 +22,7 @@ services:
   # ── edge-gateway (Go) ── proxy + resilience + journaling (Phase 1) ──
   edge-gateway:
     build: ./services/edge-gateway
-    image: rep/edge-gateway:0.1.0       # pinned tag, never :latest
+    image: rep/edge-gateway:0.1.1       # pinned tag, never :latest
     container_name: edge-gateway
     profiles: ["core", "full"]
     ports:
@@ -136,7 +136,7 @@ services:
 # ── catalog-api (Go) ── monitored-systems metadata → MongoDB ──
   catalog-api:
     build: ./services/catalog-api
-    image: rep/catalog-api:0.1.0
+    image: rep/catalog-api:0.1.1
     container_name: catalog-api
     profiles: ["full"]                  # only in the full profile
     expose:

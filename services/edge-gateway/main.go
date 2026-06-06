@@ -2,17 +2,39 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"sync/atomic"
+	"strconv"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// Simple request counter (Phase 1: replaced by the real Prometheus client).
-var requests int64
+// ── Métricas RED, con los MISMOS nombres que el resto de servicios ──
+var (
+	httpRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_requests_received_total",
+			Help: "Total HTTP requests received.",
+		},
+		[]string{"code", "method", "endpoint"},
+	)
+	httpRequestDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "http_request_duration_seconds",
+			Help:    "HTTP request duration in seconds.",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"code", "method", "endpoint"},
+	)
+)
 
-// writeJSON centralizes the JSON response (DRY: a single place that sets headers).
+func init() {
+	prometheus.MustRegister(httpRequestsTotal, httpRequestDuration)
+}
+
 func writeJSON(w http.ResponseWriter, code int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
@@ -20,7 +42,6 @@ func writeJSON(w http.ResponseWriter, code int, payload any) {
 }
 
 func main() {
-	// The backend URL comes from env (12-factor): injectable, not hardcoded.
 	eventsURL := os.Getenv("EVENTS_API_URL")
 	if eventsURL == "" {
 		eventsURL = "http://events-api:8080"
@@ -29,13 +50,12 @@ func main() {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt64(&requests, 1)
 		writeJSON(w, http.StatusOK, map[string]string{
-			"service":   "edge-gateway",
-			"language":  "Go",
-			"role":      "reverse proxy + resilience + request journaling",
-			"backend":   eventsURL,
-			"message":   "Hello from edge-gateway - Phase 0 stub",
+			"service":  "edge-gateway",
+			"language": "Go",
+			"role":     "reverse proxy + resilience + request journaling",
+			"backend":  eventsURL,
+			"message":  "Hello from edge-gateway - Phase 0 stub",
 		})
 	})
 
@@ -47,14 +67,48 @@ func main() {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 	})
 
-	// Minimal /metrics in Prometheus exposition format (valid and scrapeable).
-	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-		fmt.Fprint(w, "# HELP gateway_up Service up indicator\n# TYPE gateway_up gauge\ngateway_up 1\n")
-		fmt.Fprintf(w, "# HELP gateway_requests_total Total HTTP requests handled\n# TYPE gateway_requests_total counter\ngateway_requests_total %d\n", atomic.LoadInt64(&requests))
-	})
+	// El handler oficial de Prometheus expone TODAS las métricas registradas.
+	mux.Handle("/metrics", promhttp.Handler())
+
+	// Middleware que mide cada request (rate, errores, duración).
+	wrapped := metricsMiddleware(mux)
 
 	addr := ":8080"
 	log.Printf("edge-gateway listening on %s, backend=%s", addr, eventsURL)
-	log.Fatal(http.ListenAndServe(addr, mux))
+	log.Fatal(http.ListenAndServe(addr, wrapped))
+}
+
+// statusRecorder captura el código de estado para etiquetar las métricas.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+// metricsMiddleware registra rate + errores + duración por cada request.
+func metricsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/metrics" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+
+		next.ServeHTTP(rec, r)
+
+		code := strconv.Itoa(rec.status)
+		labels := prometheus.Labels{
+			"code":     code,
+			"method":   r.Method,
+			"endpoint": r.URL.Path,
+		}
+		httpRequestsTotal.With(labels).Inc()
+		httpRequestDuration.With(labels).Observe(time.Since(start).Seconds())
+	})
 }
