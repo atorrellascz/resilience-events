@@ -22,7 +22,7 @@ and verified against.
 |------|---------|---------|
 | Docker Desktop | 29.5.2 | (manual install) |
 | Docker Compose | v2 (`docker compose`) | bundled with Docker Desktop |
-| .NET SDK | 10.0.x (LTS) | `winget install Microsoft.DotNet.SDK.8` (already had 10) |
+| .NET SDK | 10.0.x (LTS) | `winget install Microsoft.DotNet.SDK.10` (already had 10) |
 | Go | 1.26.4 | `winget install GoLang.Go` |
 | Python | 3.13.13 | `winget install Python.Python.3.13` |
 | Git | 2.47.x | `winget install Git.Git` |
@@ -223,13 +223,62 @@ retry vs Job · core/full profiles · DTOs vs entity · domain entity vs ORM mod
 removed `pool_pre_ping` · Mongo no-auth in local · all-in-`default`-namespace in
 local (separate by domain in prod).
 
-## Post-deploy: enrutado cross-namespace de Alertmanager
+## Observability stack (Phase 3)
 
-El chart kube-prometheus-stack v86.2.0 no propaga `alertmanagerConfigMatcherStrategy`
-via Helm values. Tras el primer deploy, aplicar una vez:
+The observability stack is deployed declaratively via Argo CD. These are the bootstrap notes.
 
-    kubectl patch alertmanager kube-prometheus-stack-alertmanager -n monitoring \
-      --type merge -p '{"spec":{"alertmanagerConfigMatcherStrategy":{"type":"None"}}}'
+### Components
 
-Esto permite que las alertas de servicios en otros namespaces (ej. events-api en
-`default`) lleguen a los receivers del AlertmanagerConfig (que vive en `monitoring`).
+| Argo Application | Source | Namespace |
+|------------------|--------|-----------|
+| observability | `prometheus-community/kube-prometheus-stack` v86.2.0 | monitoring |
+| dashboards | `deploy/helm/dashboards` (in this repo) | monitoring |
+| loki | `grafana/loki` v6.24.0 (single-binary mode) | monitoring |
+| promtail | `grafana/promtail` v6.16.6 (DaemonSet) | monitoring |
+
+The `dashboards` chart bundles all observability *config as code*: the RED dashboard (ConfigMap with `grafana_dashboard: "1"`), the Loki datasource (ConfigMap with `grafana_datasource: "1"`), the SLO `PrometheusRule`, and the Slack `AlertmanagerConfig`. The Grafana sidecars auto-discover the dashboard and datasource by label.
+
+### Apply the Argo Applications
+
+```powershell
+kubectl apply -f deploy/argocd/observability-app.yaml
+kubectl apply -f deploy/argocd/dashboards-app.yaml
+kubectl apply -f deploy/argocd/loki-app.yaml
+kubectl apply -f deploy/argocd/promtail-app.yaml
+```
+
+Argo reconciles each to its source. Verify:
+
+```powershell
+kubectl get applications -n argocd
+kubectl get pods -n monitoring
+```
+
+### Slack alerting — secret + bootstrap
+
+1. Create a Slack Incoming Webhook (https://api.slack.com/apps → your app → Incoming Webhooks) and store it as a Secret (never in Git):
+
+```powershell
+kubectl create secret generic alertmanager-slack -n monitoring --from-literal=webhook-url='YOUR_WEBHOOK_URL'
+```
+
+2. The kube-prometheus-stack v86.2.0 does **not** propagate `alertmanagerConfigMatcherStrategy` via Helm values. Apply once after deploy so alerts from services in `default` reach the Slack receiver (which lives in `monitoring`):
+
+```powershell
+@'
+spec:
+  alertmanagerConfigMatcherStrategy:
+    type: None
+'@ | Out-File -Encoding ascii patch.yaml
+kubectl patch alertmanager kube-prometheus-stack-alertmanager -n monitoring --type merge --patch-file patch.yaml
+Remove-Item patch.yaml
+```
+
+> This is a documented limitation of the chart version, applied as an explicit bootstrap step rather than hidden. The intent is also declared in `observability-app.yaml` for when the chart supports it.
+
+### Resource notes (local)
+
+- The full stack needs node memory headroom. Raise WSL memory (`%USERPROFILE%\.wslconfig` → `[wsl2] memory=12GB`), then `wsl --shutdown` and restart Docker Desktop.
+- Disable "Resource Saver" in Docker Desktop — it throttles pods on idle and causes restarts.
+- Grafana memory limit is set to 512Mi (256Mi caused `OOMKilled`).
+- Loki runs in single-binary mode with filesystem storage and caching disabled to stay light locally; in the cloud it would use object storage (Azure Blob) and a scalable deployment mode.
