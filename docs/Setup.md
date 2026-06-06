@@ -222,3 +222,14 @@ Fluent API vs Data Annotations · Redpanda→Event Hubs · migrate-on-startup wi
 retry vs Job · core/full profiles · DTOs vs entity · domain entity vs ORM model ·
 removed `pool_pre_ping` · Mongo no-auth in local · all-in-`default`-namespace in
 local (separate by domain in prod).
+
+## Post-deploy: enrutado cross-namespace de Alertmanager
+
+El chart kube-prometheus-stack v86.2.0 no propaga `alertmanagerConfigMatcherStrategy`
+via Helm values. Tras el primer deploy, aplicar una vez:
+
+    kubectl patch alertmanager kube-prometheus-stack-alertmanager -n monitoring \
+      --type merge -p '{"spec":{"alertmanagerConfigMatcherStrategy":{"type":"None"}}}'
+
+Esto permite que las alertas de servicios en otros namespaces (ej. events-api en
+`default`) lleguen a los receivers del AlertmanagerConfig (que vive en `monitoring`).
