@@ -3,26 +3,49 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"sync/atomic"
+	"strconv"
 	"time"
 
 	"github.com/atorrellascz/resilience-events/catalog-api/handler"
 	"github.com/atorrellascz/resilience-events/catalog-api/repository"
 	"github.com/atorrellascz/resilience-events/catalog-api/service"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-var requests int64
+// ── Métricas RED, con los MISMOS nombres que prometheus-net (.NET) ──
+// Así el dashboard funciona igual para todos los servicios polyglot.
+var (
+	httpRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_requests_received_total",
+			Help: "Total HTTP requests received.",
+		},
+		[]string{"code", "method", "endpoint"},
+	)
+	httpRequestDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "http_request_duration_seconds",
+			Help:    "HTTP request duration in seconds.",
+			Buckets: prometheus.DefBuckets, // 0.005 .. 10s
+		},
+		[]string{"code", "method", "endpoint"},
+	)
+)
+
+func init() {
+	// Registramos las métricas en el registro por defecto de Prometheus.
+	prometheus.MustRegister(httpRequestsTotal, httpRequestDuration)
+}
 
 func main() {
-	// ── Config from environment (12-factor) ──
 	mongoURI := getEnv("MONGO_URI", "mongodb://mongodb:27017")
 	dbName := getEnv("MONGO_DB", "catalog")
 
-	// ── Connect to Mongo with a timeout (don't hang waiting) ──
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -32,19 +55,16 @@ func main() {
 	}
 	log.Printf("connected to MongoDB at %s (db=%s)", mongoURI, dbName)
 
-	// ── Composition root: assemble the layers (manual DI) ──
 	svc := service.NewCatalogService(repo)
 	h := handler.NewCatalogHandler(svc)
 
 	mux := http.NewServeMux()
-	h.Register(mux) // business routes: /api/systems
+	h.Register(mux)
 
-	// ── Operational endpoints (same contract as the other services) ──
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "healthy"})
 	})
 
-	// REAL readiness: does Mongo respond?
 	mux.HandleFunc("GET /ready", func(w http.ResponseWriter, r *http.Request) {
 		if err := svc.Ready(r.Context()); err != nil {
 			writeJSON(w, http.StatusServiceUnavailable,
@@ -54,25 +74,50 @@ func main() {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 	})
 
-	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-		fmt.Fprint(w, "# HELP catalog_up Service up indicator\n# TYPE catalog_up gauge\ncatalog_up 1\n")
-		fmt.Fprintf(w, "# HELP catalog_requests_total Total HTTP requests handled\n# TYPE catalog_requests_total counter\ncatalog_requests_total %d\n", atomic.LoadInt64(&requests))
-	})
+	// El handler oficial de Prometheus expone TODAS las métricas registradas.
+	mux.Handle("GET /metrics", promhttp.Handler())
 
-	// ── Simple middleware: counts requests for /metrics ──
-	wrapped := countMiddleware(mux)
+	// Middleware que mide cada request (rate, errores, duración).
+	wrapped := metricsMiddleware(mux)
 
 	addr := ":8080"
 	log.Printf("catalog-api listening on %s", addr)
 	log.Fatal(http.ListenAndServe(addr, wrapped))
 }
 
-// countMiddleware increments the counter on each request (RED: rate).
-func countMiddleware(next http.Handler) http.Handler {
+// statusRecorder captura el código de estado para poder etiquetarlo.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+// metricsMiddleware registra rate + errores + duración por cada request.
+func metricsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt64(&requests, 1)
-		next.ServeHTTP(w, r)
+		// No medimos /metrics a sí mismo (ruido).
+		if r.URL.Path == "/metrics" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+
+		next.ServeHTTP(rec, r)
+
+		code := strconv.Itoa(rec.status)
+		labels := prometheus.Labels{
+			"code":     code,
+			"method":   r.Method,
+			"endpoint": r.URL.Path,
+		}
+		httpRequestsTotal.With(labels).Inc()
+		httpRequestDuration.With(labels).Observe(time.Since(start).Seconds())
 	})
 }
 
