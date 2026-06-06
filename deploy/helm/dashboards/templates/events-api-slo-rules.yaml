@@ -1,146 +1,98 @@
 # ═══════════════════════════════════════════════════════════════════════
 # PrometheusRule: define SLOs y alertas para events-api.
-# Un PrometheusRule es un CRD (tipo de objeto que añadió el operador de
+# Un PrometheusRule es un CRD (tipo de objeto que anadio el operador de
 # Prometheus). El operador lo detecta y carga estas reglas en Prometheus.
 # ═══════════════════════════════════════════════════════════════════════
-apiVersion: monitoring.coreos.com/v1   # la API del operador de Prometheus (no la de k8s nativa)
-kind: PrometheusRule                    # el tipo de objeto: reglas para Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
 metadata:
-  name: events-api-slo                  # nombre del objeto (cómo lo ves con kubectl get prometheusrule)
-  namespace: monitoring                 # debe vivir donde el operador busca (namespace de Prometheus)
+  name: events-api-slo
+  namespace: monitoring
   labels:
-    release: kube-prometheus-stack      # CLAVE: el operador solo adopta reglas con esta etiqueta.
-                                        # Sin ella, Prometheus ignora este archivo.
+    release: kube-prometheus-stack      # el operador solo adopta reglas con esta etiqueta
 spec:
-  groups:                               # las reglas se organizan en GRUPOS (se evalúan juntas, en orden)
+  groups:
 
     # ───────────────────────────────────────────────────────────────────
-    # GRUPO 1 — RECORDING RULES (reglas de grabación)
-    # Pre-calculan un valor y lo guardan como una métrica NUEVA.
-    # ¿Por qué? Porque calcular el SLI (una división con rate()) es costoso.
-    # En vez de recalcularlo en cada alerta y cada panel, lo computamos UNA
-    # vez aquí, y todos reutilizan el resultado. Eficiencia + consistencia.
+    # GRUPO 1 — RECORDING RULES: pre-calculan los SLIs.
+    # Excluyen endpoints operativos (/health, /ready, /metrics) porque no
+    # son trafico de usuario; incluirlos contamina el SLO con ruido.
     # ───────────────────────────────────────────────────────────────────
-    - name: events-api.sli              # nombre del grupo (organizativo)
-      interval: 30s                     # cada cuánto se recalculan estas reglas (cada 30 segundos)
+    - name: events-api.sli
+      interval: 30s
       rules:
 
-        # ── SLI de DISPONIBILIDAD, ventana de 5 minutos ──
-        # Calcula: ¿qué fracción de mis requests son errores 5xx?
-        - record: job:http_error_ratio:rate5m   # nombre de la métrica NUEVA que se crea.
-                                                 # Convención: nivel_agregación:métrica:operación
+        # SLI de DISPONIBILIDAD, ventana 5m: fraccion de requests 5xx.
+        - record: job:http_error_ratio:rate5m
           expr: |
-            # NUMERADOR: tasa de requests que son errores de servidor (5xx).
-            # rate(...[5m]) = peticiones por segundo, promediadas sobre los últimos 5 min.
-            # code=~"5.." = regex: cualquier código que empiece por 5 (500, 502, 503...).
-            sum(rate(http_requests_received_total{job="events-api", code=~"5.."}[5m]))
+            sum(rate(http_requests_received_total{job="events-api", code=~"5..", exported_endpoint!~"/health|/ready|/metrics"}[5m]))
             /
-            # DENOMINADOR: tasa de TODAS las requests (sin filtrar por código).
-            # clamp_min(..., 0.001) = "nunca menor que 0.001". Esto EVITA DIVIDIR POR CERO:
-            # si no hay tráfico, el denominador sería 0 → la división explotaría (NaN).
-            # Con clamp_min, el peor caso es dividir por 0.001, dando un número manejable.
-            clamp_min(sum(rate(http_requests_received_total{job="events-api"}[5m])), 0.001)
-            # RESULTADO: un número entre 0 y 1. Ej: 0.02 = 2% de las requests fallaron.
+            clamp_min(sum(rate(http_requests_received_total{job="events-api", exported_endpoint!~"/health|/ready|/metrics"}[5m])), 0.001)
 
-        # ── El MISMO SLI pero con ventana de 1 HORA ──
-        # ¿Por qué dos ventanas? La de 5m reacciona rápido (detecta problemas nuevos),
-        # la de 1h confirma que es sostenido (filtra picos pasajeros). Las alertas
-        # usarán AMBAS para no dispararse por un blip de 30 segundos.
+        # El MISMO SLI, ventana 1h (para confirmar que es sostenido).
         - record: job:http_error_ratio:rate1h
           expr: |
-            sum(rate(http_requests_received_total{job="events-api", code=~"5.."}[1h]))
+            sum(rate(http_requests_received_total{job="events-api", code=~"5..", exported_endpoint!~"/health|/ready|/metrics"}[1h]))
             /
-            clamp_min(sum(rate(http_requests_received_total{job="events-api"}[1h])), 0.001)
+            clamp_min(sum(rate(http_requests_received_total{job="events-api", exported_endpoint!~"/health|/ready|/metrics"}[1h])), 0.001)
 
-        # ── SLI de LATENCIA, ventana de 5 minutos ──
-        # Calcula: ¿qué fracción de requests fueron LENTAS (>300ms)?
+        # SLI de LATENCIA, ventana 5m: fraccion de requests LENTAS (>256ms).
         - record: job:http_slow_ratio:rate5m
           expr: |
-            # Aquí usamos el HISTOGRAMA (los buckets _bucket).
-            # Cada bucket "le=X" cuenta cuántas requests tardaron MENOS O IGUAL a X segundos.
-            # le="0.256" = el bucket de ~256ms (el más cercano a 300ms en tus buckets).
-            #
-            # Idea: (requests rápidas / total) = fracción que SÍ cumplió.
-            #       1 - eso = fracción que NO cumplió = las LENTAS.
             1 - (
-              # NUMERADOR: tasa de requests que entraron bajo 256ms (las rápidas).
-              sum(rate(http_request_duration_seconds_bucket{job="events-api", le="0.256"}[5m]))
+              sum(rate(http_request_duration_seconds_bucket{job="events-api", le="0.256", exported_endpoint!~"/health|/ready|/metrics"}[5m]))
               /
-              # DENOMINADOR: tasa del total de requests medidas.
-              # _count es el contador total del histograma (todas las observaciones).
-              clamp_min(sum(rate(http_request_duration_seconds_count{job="events-api"}[5m])), 0.001)
+              clamp_min(sum(rate(http_request_duration_seconds_count{job="events-api", exported_endpoint!~"/health|/ready|/metrics"}[5m])), 0.001)
             )
-            # RESULTADO: ej. 0.03 = 3% de las requests tardaron más de 256ms.
 
     # ───────────────────────────────────────────────────────────────────
-    # GRUPO 2 — ALERTING RULES (reglas de alerta)
-    # Estas EVALÚAN los SLIs de arriba y disparan alertas si se violan.
-    # Usan el patrón BURN-RATE del Google SRE Book.
+    # GRUPO 2 — ALERTING RULES: evaluan los SLIs y disparan alertas.
+    # Patron BURN-RATE del Google SRE Book.
     # ───────────────────────────────────────────────────────────────────
     - name: events-api.slo.alerts
       rules:
 
-        # ═══════════════════════════════════════════════════════════════
-        # ALERTA 1 — DISPONIBILIDAD, quema RÁPIDA del error budget
-        # ═══════════════════════════════════════════════════════════════
-        # CONCEPTO: nuestro SLO de disponibilidad es 99% → error budget = 1% (0.01).
-        # "Burn rate" = a qué velocidad consumimos ese 1%.
-        # 14.4x = consumiéndolo 14.4 veces más rápido de lo sostenible.
-        #   → A ese ritmo, el budget de TODO el mes se agota en ~2 días.
-        #   → Eso es GRAVE: merece despertar a alguien (página urgente).
-        # El número 14.4 viene del SRE Workbook (corresponde a esa ventana de 2 días).
-        - alert: EventsApiHighErrorBurnRateFast    # nombre de la alerta
+        # ALERTA 1 — DISPONIBILIDAD, quema RAPIDA del error budget.
+        # SLO 99% -> budget 1%. 14.4x = agota el budget mensual en ~2 dias.
+        # Multi-ventana (5m Y 1h) para evitar falsas alarmas. -> pagina critica.
+        - alert: EventsApiHighErrorBurnRateFast
           expr: |
-            # CONDICIÓN: el error ratio supera 14.4% (14.4 × 0.01) ...
             job:http_error_ratio:rate5m > (14.4 * 0.01)
             and
-            # ... EN AMBAS VENTANAS (5m Y 1h). Esto es la clave multi-ventana:
-            # la de 5m detecta rápido, la de 1h confirma que no es un pico pasajero.
-            # Si solo la de 5m disparara, un blip de 1 minuto daría falsa alarma.
             job:http_error_ratio:rate1h > (14.4 * 0.01)
-          for: 2m                        # la condición debe sostenerse 2 MINUTOS antes de disparar.
-                                         # Evita alertar por un parpadeo instantáneo.
-          labels:                        # etiquetas que viajan con la alerta (para enrutar/filtrar)
-            severity: critical           # severidad: crítica → en Alertmanager iría a un canal urgente
-            service: events-api          # qué servicio (útil cuando hay muchos)
-            slo: availability            # qué SLO se violó (disponibilidad vs latencia)
-          annotations:                   # texto legible para el humano que recibe la alerta
-            summary: "events-api quemando error budget MUY rápido"
-            #  $value = el valor que disparó la alerta. humanizePercentage lo formatea como %.
-            description: "Error rate {{`{{ $value | humanizePercentage }}`}} — a este ritmo el budget mensual se agota en ~2 días."
+          for: 2m
+          labels:
+            severity: critical
+            service: events-api
+            slo: availability
+          annotations:
+            summary: "events-api quemando error budget MUY rapido"
+            description: "Error rate {{`{{ $value | humanizePercentage }}`}} — a este ritmo el budget mensual se agota en ~2 dias."
 
-        # ═══════════════════════════════════════════════════════════════
-        # ALERTA 2 — DISPONIBILIDAD, quema LENTA (degradación sostenida)
-        # ═══════════════════════════════════════════════════════════════
-        # 3x = consumiendo el budget 3 veces más rápido de lo normal.
-        # No es urgente (no se agota en horas), pero es una degradación real
-        # que hay que investigar → warning (ticket, no página).
+        # ALERTA 2 — DISPONIBILIDAD, quema LENTA (degradacion sostenida).
+        # 3x sobre 1h -> warning (ticket, no pagina).
         - alert: EventsApiHighErrorBurnRateSlow
           expr: |
-            # Solo miramos la ventana de 1h (la lenta), porque buscamos algo SOSTENIDO.
             job:http_error_ratio:rate1h > (3 * 0.01)
-          for: 15m                       # debe sostenerse 15 min (es "lento", damos más margen)
+          for: 15m
           labels:
-            severity: warning            # warning → canal no urgente / ticket
+            severity: warning
             service: events-api
             slo: availability
           annotations:
             summary: "events-api con error rate elevado sostenido"
-            description: "Error rate {{`{{ $value | humanizePercentage }}`}} en la última hora."
+            description: "Error rate {{`{{ $value | humanizePercentage }}`}} en la ultima hora."
 
-        # ═══════════════════════════════════════════════════════════════
-        # ALERTA 3 — LATENCIA (tu ejemplo de "depósitos que tardan mucho")
-        # ═══════════════════════════════════════════════════════════════
-        # SLO de latencia: 95% de requests bajo 300ms → permitimos 5% lentas (0.05).
-        # Si más del 5% son lentas, el SLO de latencia se está violando.
+        # ALERTA 3 — LATENCIA: demasiadas requests lentas (>256ms).
+        # SLO 95% bajo 300ms -> permitimos 5% lentas. -> warning.
         - alert: EventsApiHighLatency
           expr: |
-            job:http_slow_ratio:rate5m > 0.05    # más del 5% de requests sobre 256ms
-          for: 5m                                # sostenido 5 min
+            job:http_slow_ratio:rate5m > 0.05
+          for: 5m
           labels:
             severity: warning
             service: events-api
-            slo: latency                         # este es de LATENCIA (distinto SLO)
+            slo: latency
           annotations:
             summary: "events-api lento: muchas requests >300ms"
             description: "{{`{{ $value | humanizePercentage }}`}} de las requests superan 300ms (SLO: <5%)."
