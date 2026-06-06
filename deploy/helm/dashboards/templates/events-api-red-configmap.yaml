@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-events-api-red
+  namespace: {{ .Values.namespace }}
+  labels:
+    grafana_dashboard: "1"        # ← la etiqueta MÁGICA que el sidecar detecta
+data:
+  events-api-red.json: |-
+    {{- .Files.Get "dashboards/events-api-red.json" | nindent 4 }}

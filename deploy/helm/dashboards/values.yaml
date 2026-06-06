@@ -1,0 +1,2 @@
+# Namespace donde corre Grafana (su sidecar busca ConfigMaps aquí).
+namespace: monitoring
