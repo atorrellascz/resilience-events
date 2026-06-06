@@ -9,7 +9,8 @@ spec:
   selector:
     app: edge-gateway
   ports:
-    - port: {{ .Values.service.port }}
+    - name: http
+      port: {{ .Values.service.port }}
       targetPort: {{ .Values.service.port }}
       nodePort: {{ .Values.service.nodePort }}
       protocol: TCP

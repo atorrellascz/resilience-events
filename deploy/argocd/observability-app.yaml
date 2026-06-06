@@ -1,0 +1,66 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability
+  namespace: argocd
+spec:
+  project: default
+
+  # ── Source: EXTERNAL community chart (not from your repo) ──
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 86.2.0          # pinned version
+    helm:
+      releaseName: kube-prometheus-stack
+      values: |
+        # ── Values tuned for LOCAL (kind, bounded RAM) ──
+        # Grafana: password and access for the demo
+        grafana:
+          adminPassword: admin
+          # fewer resources locally
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+
+        # Prometheus: short retention and bounded resources (local)
+        prometheus:
+          prometheusSpec:
+            retention: 6h
+            resources:
+              requests:
+                cpu: 100m
+                memory: 400Mi
+              limits:
+                memory: 800Mi
+            # KEY: let Prometheus discover ServiceMonitors from ANY namespace,
+            # not only those carrying its release label. This way it sees your 4 services.
+            serviceMonitorSelectorNilUsesHelmValues: false
+            podMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+
+        # Alertmanager: lightweight locally
+        alertmanager:
+          alertmanagerSpec:
+            resources:
+              requests:
+                cpu: 25m
+                memory: 64Mi
+              limits:
+                memory: 128Mi
+
+  # ── Destination: dedicated namespace for observability ──
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true        # creates the 'monitoring' namespace on its own
+      - ServerSideApply=true        # required: the Prometheus CRDs are large

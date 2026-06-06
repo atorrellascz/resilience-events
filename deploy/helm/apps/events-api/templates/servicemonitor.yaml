@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: events-api
+  labels:
+    app: events-api
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: events-api          # finds the Service with this label
+  endpoints:
+    - port: http               # the name we just set
+      path: /metrics           # where events-api exposes its metrics
+      interval: 15s            # scrape every 15 seconds

@@ -9,6 +9,7 @@ spec:
   selector:
     app: events-api          # routes to the pods with this label
   ports:
-    - port: {{ .Values.service.port }}
+    - name: http
+      port: {{ .Values.service.port }}
       targetPort: {{ .Values.service.port }}
       protocol: TCP
