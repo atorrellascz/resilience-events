@@ -58,7 +58,7 @@
   "time": { "from": "now-30m", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Resilience Events — RED (events-api)",
+  "title": "Resilience Events — RED",
   "uid": "events-api-red",
   "version": 1,
   "panels": [
