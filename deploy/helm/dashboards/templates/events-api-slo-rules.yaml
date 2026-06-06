@@ -106,8 +106,8 @@ spec:
             slo: availability            # qué SLO se violó (disponibilidad vs latencia)
           annotations:                   # texto legible para el humano que recibe la alerta
             summary: "events-api quemando error budget MUY rápido"
-            # {{ $value }} = el valor que disparó la alerta. humanizePercentage lo formatea como %.
-            description: "Error rate {{ $value | humanizePercentage }} — a este ritmo el budget mensual se agota en ~2 días."
+            #  $value = el valor que disparó la alerta. humanizePercentage lo formatea como %.
+            description: "Error rate {{`{{ $value | humanizePercentage }}`}} — a este ritmo el budget mensual se agota en ~2 días."
 
         # ═══════════════════════════════════════════════════════════════
         # ALERTA 2 — DISPONIBILIDAD, quema LENTA (degradación sostenida)
@@ -126,7 +126,7 @@ spec:
             slo: availability
           annotations:
             summary: "events-api con error rate elevado sostenido"
-            description: "Error rate {{ $value | humanizePercentage }} en la última hora."
+            description: "Error rate {{`{{ $value | humanizePercentage }}`}} en la última hora."
 
         # ═══════════════════════════════════════════════════════════════
         # ALERTA 3 — LATENCIA (tu ejemplo de "depósitos que tardan mucho")
@@ -143,4 +143,4 @@ spec:
             slo: latency                         # este es de LATENCIA (distinto SLO)
           annotations:
             summary: "events-api lento: muchas requests >300ms"
-            description: "{{ $value | humanizePercentage }} de las requests superan 300ms (SLO: <5%)."
+            description: "{{`{{ $value | humanizePercentage }}`}} de las requests superan 300ms (SLO: <5%)."
