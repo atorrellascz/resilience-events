@@ -158,7 +158,7 @@ services:
   # ── anomaly-ai (Python) ── metrics + AI brain → MySQL ──
   anomaly-ai:
     build: ./services/anomaly-ai
-    image: rep/anomaly-ai:0.1.0
+    image: rep/anomaly-ai:0.1.1
     container_name: anomaly-ai
     profiles: ["full"]
     expose:

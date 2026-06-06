@@ -1,6 +1,7 @@
+import time
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Response
-from prometheus_client import Counter, generate_latest, CONTENT_TYPE_LATEST
+from fastapi import FastAPI, Response, Request
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from app.db import engine, Base
 from app.repository import models  # noqa: F401 — registers the model in Base.metadata
 from app.api.routes import router as samples_router
@@ -10,25 +11,48 @@ from app.db import AsyncSessionLocal
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # On startup: create the table if it doesn't exist (dev). In prod this would be Alembic (migrations).
+    # On startup: create the table if it doesn't exist (dev). In prod: Alembic.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
-    # On shutdown: close the engine cleanly.
     await engine.dispose()
 
 
 app = FastAPI(title="anomaly-ai", version="0.1.0", lifespan=lifespan)
 
-REQUESTS = Counter("anomaly_requests_total", "Total HTTP requests handled")
+# ── Métricas RED, con los MISMOS nombres que el resto de servicios ──
+HTTP_REQUESTS = Counter(
+    "http_requests_received_total",
+    "Total HTTP requests received.",
+    ["code", "method", "endpoint"],
+)
+HTTP_DURATION = Histogram(
+    "http_request_duration_seconds",
+    "HTTP request duration in seconds.",
+    ["code", "method", "endpoint"],
+)
 
 app.include_router(samples_router)
 
 
 @app.middleware("http")
-async def count_requests(request, call_next):
-    REQUESTS.inc()
-    return await call_next(request)
+async def record_metrics(request: Request, call_next):
+    # No medimos /metrics a sí mismo (ruido).
+    if request.url.path == "/metrics":
+        return await call_next(request)
+
+    start = time.perf_counter()
+    response = await call_next(request)
+    elapsed = time.perf_counter() - start
+
+    labels = {
+        "code": str(response.status_code),
+        "method": request.method,
+        "endpoint": request.url.path,
+    }
+    HTTP_REQUESTS.labels(**labels).inc()
+    HTTP_DURATION.labels(**labels).observe(elapsed)
+    return response
 
 
 @app.get("/health")  # liveness
