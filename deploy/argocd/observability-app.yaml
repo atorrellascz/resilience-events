@@ -36,6 +36,8 @@ spec:
             ruleSelectorNilUsesHelmValues: false
 
         alertmanager:
+          alertmanagerConfigMatcherStrategy:
+            type: None
           alertmanagerSpec:
             resources:
               requests:
@@ -45,10 +47,7 @@ spec:
                 memory: 128Mi
             secrets:
               - alertmanager-slack
-            # Que el operador adopte AlertmanagerConfigs de cualquier namespace
             alertmanagerConfigSelector: {}
-            alertmanagerConfigMatcherStrategy:
-              type: None
 
   destination:
     server: https://kubernetes.default.svc
