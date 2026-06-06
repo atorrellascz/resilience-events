@@ -36,8 +36,6 @@ spec:
             ruleSelectorNilUsesHelmValues: false
 
         alertmanager:
-          alertmanagerConfigMatcherStrategy:
-            type: None
           alertmanagerSpec:
             resources:
               requests:
@@ -48,6 +46,11 @@ spec:
             secrets:
               - alertmanager-slack
             alertmanagerConfigSelector: {}
+            # NOTA: kube-prometheus-stack v86.2.0 no propaga este campo via values.
+            # Se aplica como paso de bootstrap (ver SETUP.md). Se deja aqui como
+            # declaracion de intencion para cuando el chart lo soporte.
+            alertmanagerConfigMatcherStrategy:
+              type: None
 
   destination:
     server: https://kubernetes.default.svc
