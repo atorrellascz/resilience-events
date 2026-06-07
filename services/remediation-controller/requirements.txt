@@ -1,0 +1,5 @@
+# Core has no runtime dependencies beyond the standard library — by design.
+# (The domain model and engine are pure Python; infrastructure lives in adapters.)
+
+# Dev / test
+pytest==8.3.4
