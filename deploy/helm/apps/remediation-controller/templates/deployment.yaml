@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remediation-controller
+  labels:
+    app: remediation-controller
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: remediation-controller
+  template:
+    metadata:
+      labels:
+        app: remediation-controller
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001          # the appuser from the Python Dockerfile
+        fsGroup: 10001
+      containers:
+        - name: remediation-controller
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          # Loop behavior is env-driven: same image local and prod, dry-run by default.
+          env:
+            - name: REMEDIATION_DRY_RUN
+              value: "{{ .Values.loop.dryRun }}"
+            - name: REMEDIATION_LOOP_INTERVAL
+              value: "{{ .Values.loop.intervalSeconds }}"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.service.port }}
+            periodSeconds: 5
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.service.port }}
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: {{ .Values.service.port }}
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]

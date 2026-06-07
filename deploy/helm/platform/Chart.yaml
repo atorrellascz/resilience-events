@@ -30,3 +30,6 @@ dependencies:
   - name: edge-gateway
     version: 0.1.0
     repository: "file://../apps/edge-gateway"
+  - name: remediation-controller
+    version: 0.1.0
+    repository: "file://../apps/remediation-controller"    

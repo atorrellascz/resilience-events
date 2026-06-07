@@ -1,5 +1,12 @@
-# Core has no runtime dependencies beyond the standard library — by design.
-# (The domain model and engine are pure Python; infrastructure lives in adapters.)
+# Service runtime
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+prometheus-client==0.20.0
 
 # Dev / test
 pytest==8.3.4
+
+# NOTE: the core (app/core) has no runtime dependencies beyond the standard
+# library by design. The deps above are for the service entrypoint (main.py)
+# and tests. LLM SDKs (openai, anthropic) and infra clients (kubernetes,
+# redis, pymongo, kafka) are added as their adapters are wired in.

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: remediation-controller
+description: Guardrailed AI remediation loop (Python/FastAPI)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
