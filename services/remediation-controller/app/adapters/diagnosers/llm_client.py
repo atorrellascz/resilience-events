@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+import os
+from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class LLMClient(Protocol):
@@ -41,49 +43,59 @@ class StaticLLMClient:
 
 class OpenAIClient:
     """
-    Stub for Azure OpenAI / OpenAI. Not wired to the network yet -- it documents
-    exactly where the SDK call goes, so enabling it later is a small, contained
-    change. Constructing it does nothing expensive; it raises only if you
-    actually call complete() before implementing it.
+    OpenAI / Azure OpenAI client. Ready to connect: set OPENAI_API_KEY (and
+    optionally OPENAI_MODEL) in the environment, then wire it in wiring.py.
+    The SDK is imported lazily inside complete() so this module stays importable
+    — and the tests stay dependency-free — even when the SDK isn't installed.
     """
 
-    def __init__(self, model: str = "gpt-4o-mini", api_key: str | None = None) -> None:
-        self._model = model
-        self._api_key = api_key  # injected from env/secret later; never hardcoded
+    def __init__(self, model: str | None = None, api_key: str | None = None) -> None:
+        self._model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        self._api_key = api_key or os.getenv("OPENAI_API_KEY")  # 12-factor: from env, never hardcoded
 
     def complete(self, system_prompt: str, user_prompt: str) -> str:
-        # Later:
-        #   from openai import OpenAI            (or AzureOpenAI)
-        #   client = OpenAI(api_key=self._api_key)
-        #   resp = client.chat.completions.create(
-        #       model=self._model,
-        #       messages=[{"role": "system", "content": system_prompt},
-        #                 {"role": "user", "content": user_prompt}],
-        #       temperature=0,          # deterministic-ish for an operational tool
-        #   )
-        #   return resp.choices[0].message.content
-        raise NotImplementedError("OpenAIClient.complete is a stub; wire the SDK to enable it")
+        from openai import OpenAI  # lazy import: only needed when actually called
+
+        client = OpenAI(api_key=self._api_key)
+        resp = client.chat.completions.create(
+            model=self._model,
+            temperature=0,  # operational classifier, not creative writing -> deterministic
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        return resp.choices[0].message.content or ""
 
 
 class ClaudeClient:
     """
-    Stub for Anthropic Claude. Same shape as OpenAIClient so the two are fully
-    interchangeable behind LLMClient.
+    Anthropic Claude client. Same shape as OpenAIClient, so the two are fully
+    interchangeable behind LLMClient. Ready to connect: set ANTHROPIC_API_KEY
+    (and optionally ANTHROPIC_MODEL) in the environment, then wire it in.
+    A fast, cheap model (Haiku) is a sensible default: the job is to pick ONE
+    action from a tiny allowlist, not to write prose.
     """
 
-    def __init__(self, model: str = "claude-3-5-sonnet", api_key: str | None = None) -> None:
-        self._model = model
-        self._api_key = api_key
+    def __init__(
+        self,
+        model: str | None = None,
+        api_key: str | None = None,
+        max_tokens: int = 512,
+    ) -> None:
+        self._model = model or os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+        self._api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
+        self._max_tokens = max_tokens
 
     def complete(self, system_prompt: str, user_prompt: str) -> str:
-        # Later:
-        #   from anthropic import Anthropic
-        #   client = Anthropic(api_key=self._api_key)
-        #   resp = client.messages.create(
-        #       model=self._model,
-        #       max_tokens=512,
-        #       system=system_prompt,
-        #       messages=[{"role": "user", "content": user_prompt}],
-        #   )
-        #   return resp.content[0].text
-        raise NotImplementedError("ClaudeClient.complete is a stub; wire the SDK to enable it")
+        from anthropic import Anthropic  # lazy import: only needed when actually called
+
+        client = Anthropic(api_key=self._api_key)
+        resp = client.messages.create(
+            model=self._model,
+            max_tokens=self._max_tokens,
+            temperature=0,
+            system=system_prompt,  # Claude takes the system prompt as a top-level arg
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        return resp.content[0].text

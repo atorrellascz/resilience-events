@@ -10,3 +10,8 @@ pytest==8.3.4
 # library by design. The deps above are for the service entrypoint (main.py)
 # and tests. LLM SDKs (openai, anthropic) and infra clients (kubernetes,
 # redis, pymongo, kafka) are added as their adapters are wired in.
+
+# LLM SDKs — imported lazily, only when their client is actually wired in.
+# Tests and the mock-default loop do NOT require these.
+openai==2.41.0
+anthropic==0.107.1
